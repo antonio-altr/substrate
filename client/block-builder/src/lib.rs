@@ -26,6 +26,8 @@
 
 #![warn(missing_docs)]
 
+use std::time::Instant;
+
 use codec::Encode;
 
 use sp_api::{
@@ -200,7 +202,8 @@ where
 		let block_id = &self.block_id;
 		let extrinsics = &mut self.extrinsics;
 
-		self.api.execute_in_transaction(|api| {
+		let start = Instant::now();
+		let res = self.api.execute_in_transaction(|api| {
 			match api.apply_extrinsic_with_context(
 				block_id,
 				ExecutionContext::BlockConstruction,
@@ -215,7 +218,14 @@ where
 				)),
 				Err(e) => TransactionOutcome::Rollback(Err(Error::from(e))),
 			}
-		})
+		});
+		let end = Instant::now();
+		log::debug!(
+			target: "blockbuilder",
+			"Call apply_extrinsic api cost {:?}us",
+			end.saturating_duration_since(start).as_micros(),
+		);
+		res
 	}
 
 	/// Consume the builder to build a valid `Block` containing all pushed extrinsics.

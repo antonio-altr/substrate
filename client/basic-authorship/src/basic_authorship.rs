@@ -80,7 +80,7 @@ pub struct ProposerFactory<A, B, C, PR> {
 	/// The soft deadline indicates where we should stop attempting to add transactions
 	/// to the block, which exhaust resources. After soft deadline is reached,
 	/// we switch to a fixed-amount mode, in which after we see `MAX_SKIPPED_TRANSACTIONS`
-	/// transactions which exhaust resrouces, we will conclude that the block is full.
+	/// transactions which exhaust resources, we will conclude that the block is full.
 	soft_deadline_percent: Percent,
 	telemetry: Option<TelemetryHandle>,
 	/// When estimating the block size, should the proof be included?
@@ -166,7 +166,7 @@ impl<A, B, C, PR> ProposerFactory<A, B, C, PR> {
 	/// The soft deadline indicates where we should stop attempting to add transactions
 	/// to the block, which exhaust resources. After soft deadline is reached,
 	/// we switch to a fixed-amount mode, in which after we see `MAX_SKIPPED_TRANSACTIONS`
-	/// transactions which exhaust resrouces, we will conclude that the block is full.
+	/// transactions which exhaust resources, we will conclude that the block is full.
 	///
 	/// Setting the value too low will significantly limit the amount of transactions
 	/// we try in case they exhaust resources. Setting the value too high can
@@ -354,6 +354,11 @@ where
 		let inherents = block_builder.create_inherents(inherent_data)?;
 		let create_inherents_end = time::Instant::now();
 
+		log::debug!(
+			target: "authorship",
+			"Created inherents cost {:?}us",
+			create_inherents_end.saturating_duration_since(create_inherents_start).as_micros(),
+		);
 		self.metrics.report(|metrics| {
 			metrics.create_inherents_time.observe(
 				create_inherents_end
@@ -362,6 +367,7 @@ where
 			);
 		});
 
+		let push_inherents_start = time::Instant::now();
 		for inherent in inherents {
 			match block_builder.push(inherent) {
 				Err(ApplyExtrinsicFailed(Validity(e))) if e.exhausted_resources() => {
@@ -379,6 +385,12 @@ where
 				Ok(_) => {},
 			}
 		}
+		let push_inherents_end = time::Instant::now();
+		log::debug!(
+			target: "authorship",
+			"Push inherents total cost {:?}us",
+			push_inherents_end.saturating_duration_since(push_inherents_start).as_micros(),
+		);
 
 		// proceed with transactions
 		// We calculate soft deadline used only in case we start skipping transactions.
@@ -409,15 +421,17 @@ where
 
 		let block_size_limit = block_size_limit.unwrap_or(self.default_block_size_limit);
 
-		debug!("Attempting to push transactions from the pool.");
-		debug!("Pool status: {:?}", self.transaction_pool.status());
+		debug!(target: "authorship", "Attempting to push transactions from the pool.");
+		debug!(target: "authorship", "Pool status: {:?}", self.transaction_pool.status());
 		let mut transaction_pushed = false;
 		let mut hit_block_size_limit = false;
 
+		let push_tx_start = time::Instant::now();
 		while let Some(pending_tx) = pending_iterator.next() {
 			let now = (self.now)();
 			if now > deadline {
 				debug!(
+					target: "authorship",
 					"Consensus deadline reached when pushing block transactions, \
 					proceeding with proposing."
 				);
@@ -434,6 +448,7 @@ where
 				if skipped < MAX_SKIPPED_TRANSACTIONS {
 					skipped += 1;
 					debug!(
+						target: "authorship",
 						"Transaction would overflow the block size limit, \
 						 but will try {} more transactions before quitting.",
 						MAX_SKIPPED_TRANSACTIONS - skipped,
@@ -441,39 +456,52 @@ where
 					continue
 				} else if now < soft_deadline {
 					debug!(
+						target: "authorship",
 						"Transaction would overflow the block size limit, \
 						 but we still have time before the soft deadline, so \
 						 we will try a bit more."
 					);
 					continue
 				} else {
-					debug!("Reached block size limit, proceeding with proposing.");
+					debug!(
+						target: "authorship",
+						"Reached block size limit, proceeding with proposing."
+					);
 					hit_block_size_limit = true;
 					break
 				}
 			}
 
-			trace!("[{:?}] Pushing to the block.", pending_tx_hash);
+			log::debug!(target: "authorship", "[{:?}] Pushing to the block.", pending_tx_hash);
+			let start = time::Instant::now();
 			match sc_block_builder::BlockBuilder::push(&mut block_builder, pending_tx_data) {
 				Ok(()) => {
 					transaction_pushed = true;
-					debug!("[{:?}] Pushed to the block.", pending_tx_hash);
+					let end = time::Instant::now();
+					log::debug!(
+						target: "authorship",
+						"BlockBuilder::push(xt) cost {:?}us",
+						end.saturating_duration_since(start).as_micros(),
+					);
+					log::debug!(target: "authorship", "[{:?}] Pushed to the block.", pending_tx_hash);
 				},
 				Err(ApplyExtrinsicFailed(Validity(e))) if e.exhausted_resources() => {
 					pending_iterator.report_invalid(&pending_tx);
 					if skipped < MAX_SKIPPED_TRANSACTIONS {
 						skipped += 1;
 						debug!(
+							target: "authorship",
 							"Block seems full, but will try {} more transactions before quitting.",
 							MAX_SKIPPED_TRANSACTIONS - skipped,
 						);
 					} else if (self.now)() < soft_deadline {
 						debug!(
+							target: "authorship",
 							"Block seems full, but we still have time before the soft deadline, \
 							 so we will try a bit more before quitting."
 						);
 					} else {
-						debug!("Block is full, proceed with proposing.");
+						debug!(target: "authorship", "Block is full, proceed with proposing.");
 						break
 					}
 				},
@@ -487,11 +515,17 @@ where
 				},
 				Err(e) => {
 					pending_iterator.report_invalid(&pending_tx);
-					debug!("[{:?}] Invalid transaction: {}", pending_tx_hash, e);
+					debug!(target: "authorship", "[{:?}] Invalid transaction: {}", pending_tx_hash, e);
 					unqueue_invalid.push(pending_tx_hash);
 				},
 			}
 		}
+		let push_tx_end = time::Instant::now();
+		log::debug!(
+			target: "authorship",
+			"Push tx total cost {:?}ms",
+			push_tx_end.saturating_duration_since(push_tx_start).as_millis(),
+		);
 
 		if hit_block_size_limit && !transaction_pushed {
 			warn!(
@@ -502,7 +536,14 @@ where
 
 		self.transaction_pool.remove_invalid(&unqueue_invalid);
 
+		let build_start = time::Instant::now();
 		let (block, storage_changes, proof) = block_builder.build()?.into_inner();
+		let build_end = time::Instant::now();
+		log::debug!(
+			target: "authorship",
+			"BlockBuilder build cost {:?}ms",
+			build_end.saturating_duration_since(build_start).as_millis(),
+		);
 
 		self.metrics.report(|metrics| {
 			metrics.number_of_transactions.set(block.extrinsics().len() as u64);
