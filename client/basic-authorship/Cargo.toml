@@ -25,6 +25,7 @@ sp-blockchain = { version = "4.0.0-dev", path = "../../primitives/blockchain" }
 sc-client-api = { version = "4.0.0-dev", path = "../api" }
 sp-consensus = { version = "0.10.0-dev", path = "../../primitives/consensus/common" }
 sp-inherents = { version = "4.0.0-dev", path = "../../primitives/inherents" }
+sp-signer-api = { version = "1.0.0", path = "../../primitives/signer-api" }
 sc-telemetry = { version = "4.0.0-dev", path = "../telemetry" }
 sc-transaction-pool-api = { version = "4.0.0-dev", path = "../../client/transaction-pool/api" }
 sc-block-builder = { version = "0.10.0-dev", path = "../block-builder" }

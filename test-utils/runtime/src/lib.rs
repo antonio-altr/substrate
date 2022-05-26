@@ -720,6 +720,12 @@ cfg_if! {
 				}
 			}
 
+			impl sp_signer_api::SignerApi<Block> for Runtime {
+				fn get_signer(tx: <Block as BlockT>::Extrinsic) -> Option<Address> {
+					tx.signature.clone().map(|sig| sig.0)
+				}
+			}
+
 			impl sp_block_builder::BlockBuilder<Block> for Runtime {
 				fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> ApplyExtrinsicResult {
 					system::execute_transaction(extrinsic)
@@ -971,6 +977,12 @@ cfg_if! {
 					}
 
 					system::validate_transaction(utx)
+				}
+			}
+
+			impl sp_signer_api::SignerApi<Block> for Runtime {
+				fn get_signer(tx: <Block as BlockT>::Extrinsic) -> Option<Address> {
+					tx.signature.clone().map(|sig| sig.0)
 				}
 			}
 

@@ -57,7 +57,7 @@ use sp_blockchain::{
 	CachedHeaderMetadata, Error, HeaderBackend as ChainHeaderBackend, HeaderMetadata,
 };
 use sp_consensus::{BlockOrigin, BlockStatus, Error as ConsensusError};
-
+use sp_signer_api::SignerApi;
 use sc_utils::mpsc::{tracing_unbounded, TracingUnboundedSender};
 use sp_core::{
 	storage::{
@@ -81,6 +81,7 @@ use sp_state_machine::{
 	ChildStorageCollection, KeyValueStates, KeyValueStorageLevel, StorageCollection,
 	MAX_NESTED_TRIE_DEPTH,
 };
+use sp_signer_api::SignerApi;
 use sp_trie::{CompactProof, StorageProof};
 use std::{
 	collections::{hash_map::DefaultHasher, HashMap, HashSet},

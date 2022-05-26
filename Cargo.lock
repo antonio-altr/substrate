@@ -5121,6 +5121,7 @@ dependencies = [
  "sp-offchain",
  "sp-runtime",
  "sp-session",
+ "sp-signer-api",
  "sp-std",
  "sp-transaction-pool",
  "sp-version",
@@ -8005,6 +8006,7 @@ dependencies = [
  "sp-core",
  "sp-inherents",
  "sp-runtime",
+ "sp-signer-api",
  "substrate-prometheus-endpoint",
  "substrate-test-runtime-client",
 ]
@@ -8022,6 +8024,7 @@ dependencies = [
  "sp-core",
  "sp-inherents",
  "sp-runtime",
+ "sp-signer-api",
  "sp-state-machine",
  "substrate-test-runtime-client",
 ]
@@ -8891,6 +8894,7 @@ dependencies = [
  "sp-keystore",
  "sp-runtime",
  "sp-session",
+ "sp-signer-api",
  "sp-state-machine",
  "sp-storage",
  "sp-tracing",

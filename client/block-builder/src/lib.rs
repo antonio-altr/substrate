@@ -226,6 +226,25 @@ where
 		})
 	}
 
+	fn reverse_extrinsics_order(&mut self) {
+		self.extrinsics.reverse();
+		let index_with_signer: Vec<_> = self.extrinsics.iter().enumerate()
+			.map(|(index, xt)| (index, self.api.get_signer(&self.block_id, &xt).unwrap()))
+			.collect();
+		
+		let signers: std::collections::HashSet<_> = index_with_signer.iter().map(|(_, who)| who).collect();
+
+		for s in signers {
+			let mut filtered = index_with_signer.iter()
+				.filter_map(|(index, who)| if who == s { Some (index) } else { None })
+				.cloned();
+
+			while let (Some(front), Some(back)) = (filtered.next(), filtered.next_back()) {
+				self.extrinsics.swap(front, back);
+			}
+		}
+	}
+
 	/// Consume the builder to build a valid `Block` containing all pushed extrinsics.
 	///
 	/// Returns the build `Block`, the changes to the storage and an optional `StorageProof`
