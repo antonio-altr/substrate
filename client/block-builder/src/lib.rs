@@ -27,7 +27,6 @@
 #![warn(missing_docs)]
 
 use codec::Encode;
-
 use sp_api::{
 	ApiExt, ApiRef, Core, ProvideRuntimeApi, StorageChanges, StorageProof, TransactionOutcome,
 };
@@ -200,6 +199,8 @@ where
 		let block_id = &self.block_id;
 		let extrinsics = &mut self.extrinsics;
 
+		log::info!("[block-builder::push] Extrinsic = {:?}", xt);
+
 		self.api.execute_in_transaction(|api| {
 			match api.apply_extrinsic_with_context(
 				block_id,
@@ -208,12 +209,19 @@ where
 			) {
 				Ok(Ok(_)) => {
 					extrinsics.push(xt);
-					TransactionOutcome::Commit(Ok(()))
+					log::info!("[block-builder::push] Done");
+					//TransactionOutcome::Commit(Ok(()))
+					TransactionOutcome::Rollback(Ok(()))
 				},
-				Ok(Err(tx_validity)) => TransactionOutcome::Rollback(Err(
+				Ok(Err(tx_validity)) => {
+					log::info!("[block-builder::push] Done");
+					TransactionOutcome::Rollback(Err(
 					ApplyExtrinsicFailed::Validity(tx_validity).into(),
-				)),
-				Err(e) => TransactionOutcome::Rollback(Err(Error::from(e))),
+				))},
+				Err(e) => {
+					log::info!("[block-builder::push] Done");
+					TransactionOutcome::Rollback(Err(Error::from(e)))
+				},
 			}
 		})
 	}
@@ -224,9 +232,27 @@ where
 	/// supplied by `self.api`, combined as [`BuiltBlock`].
 	/// The storage proof will be `Some(_)` when proof recording was enabled.
 	pub fn build(mut self) -> Result<BuiltBlock<Block, backend::StateBackendFor<B, Block>>, Error> {
+
+		// execute extrinsics in reverse order
+		for xt in self.extrinsics.iter().rev() {
+			log::info!("[block-builder::build] Executing extrinsic = {:?}", xt);
+			self.api.apply_extrinsic_with_context(
+				&self.block_id,
+				ExecutionContext::BlockConstruction,
+				xt.clone(),
+			).unwrap().unwrap().unwrap(); // <- we can use unwrap as we already know it works
+		}
+
 		let header = self
 			.api
 			.finalize_block_with_context(&self.block_id, ExecutionContext::BlockConstruction)?;
+
+		// this is expected fail unless we have also reversed the order in the extrinsics root creation
+		log::info!("[block-builder::build] extrinsics_root   = {:?}", header.extrinsics_root());
+		log::info!("[block-builder::build] ordered_trie_root = {:?}", HashFor::<Block>::ordered_trie_root(
+			self.extrinsics.iter().map(Encode::encode).collect(),
+			sp_runtime::StateVersion::V0,
+		));
 
 		debug_assert_eq!(
 			header.extrinsics_root().clone(),

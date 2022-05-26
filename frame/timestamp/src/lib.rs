@@ -211,6 +211,8 @@ pub mod pallet {
 
 			<T::OnTimestampSet as OnTimestampSet<_>>::on_timestamp_set(now);
 
+			log::info!("[timestamp::set] Executing extrinsic (now={:?})", now);
+
 			Ok(())
 		}
 	}
@@ -229,6 +231,8 @@ pub mod pallet {
 			let data = (*inherent_data).saturated_into::<T::Moment>();
 
 			let next_time = cmp::max(data, Self::now() + T::MinimumPeriod::get());
+
+			log::info!("[timestamp::create_inherent] Providing timestamp (next_time={:?})", next_time);
 			Some(Call::set { now: next_time.into() })
 		}
 
