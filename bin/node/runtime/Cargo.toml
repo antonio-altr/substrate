@@ -180,6 +180,7 @@ std = [
 	"sp-npos-elections/std",
 	"sp-io/std",
 	"pallet-child-bounties/std",
+	"sp-signer-api/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
